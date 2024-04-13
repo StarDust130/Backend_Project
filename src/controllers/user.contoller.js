@@ -3,6 +3,7 @@ import { ApiError } from "../utils/ApiError.js";
 import { User } from "../models/user.model.js";
 import { uploadOnCloudinary } from "../utils/cloudinary.js";
 import { ApiResponse } from "../utils/ApiResponse.js";
+import jwt from "jsonwebtoken";
 
 const generateAccessAndRefereshTokens = async (userId) => {
   try {
@@ -194,4 +195,61 @@ const logoutUser = asyncHandler(async (req, res) => {
     .json(new ApiResponse(200, {}, "User logged out successfully 🥳"));
 });
 
-export { registerUser, loginUser, logoutUser };
+const refreshAccessToken = asyncHandler(async (req, res) => {
+  // get refresh token from cookies
+  const incomingRefreshToken = req.cookies.accessToken || req.body.refreshToken;
+
+  // check if refresh token exists
+  if (!incomingRefreshToken) {
+    throw new ApiError(401, "Unauthorized Request  🚫");
+  }
+
+  // verify refresh token
+  try {
+    const decodedToken = jwt.verify(
+      incomingRefreshToken,
+      process.env.REFRESH_TOKEN_SECRET
+    );
+
+    // find user in db
+    const user = await User.findById(decodedToken?._id);
+
+    // check if user exists
+    if (!user) {
+      throw new ApiError(401, "User not found. Create Account  🚫");
+    }
+
+    // check if refresh token is valid
+
+    if (user.refreshToken !== incomingRefreshToken) {
+      throw new ApiError(401, "Refresh Token is Expired or Used 🚫");
+    }
+
+    // option for cookies
+    const option = {
+      httpOnly: true,
+      secure: true,
+    };
+
+    // generate access and refresh token
+
+    const { accessToken, newRefreshToken } =
+      await generateAccessAndRefereshTokens(user._id);
+
+    return res
+      .status(200)
+      .cookie("accessToken", accessToken, option)
+      .cookie("refreshToken", newRefreshToken, option)
+      .json(
+        new ApiResponse(
+          200,
+          { accessToken, refreshToken: newRefreshToken },
+          "Access Token Refreshed Successfully 🥳"
+        )
+      );
+  } catch (error) {
+    throw new ApiError(401, error?.message || "Invalid Refresh Token 🚫");
+  }
+});
+
+export { registerUser, loginUser, logoutUser, refreshAccessToken };
