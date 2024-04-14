@@ -313,6 +313,13 @@ const updateUserAvatar = asyncHandler(async (req, res) => {
     throw new ApiError(400, "Avatar is required 🖼️");
   }
 
+  // delete old avatar from cloudinary
+  if (req.user.avatar) {
+    const avatarPublicId = req.user.avatar.split("/").pop().split(".")[0];
+    await deleteFromCloudinary(avatarPublicId);
+  }
+
+
   const avatar = await uploadOnCloudinary(avatarLocalPath);
 
   if (!avatar.url) {
